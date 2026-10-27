@@ -54,7 +54,7 @@ _FAMILY_TOKENS = ("WROOM", "WROVER", "MINI", "PICO", "SOLO", "QFN", "M1", "MHET"
 _ORDERING_CODE_RE = re.compile(r"(?<![A-Z0-9])N(\d{1,3})(?:R(\d{1,3}[A-Z]?))?(?=$|[A-Z-])")
 _FAMILY_RE = re.compile(r"(WROOM|WROVER|MINI|PICO|SOLO|QFN)(?:[-_]?(\d{1,2}))?")
 
-# PSRAM sizes that are only ever sold with an octal (OPI) bus.
+# PSRAM sizes that are sold with an octal (OPI) bus; smaller ones are quad.
 _OCTAL_MIN_MB = 8
 
 # PSRAM bus names accepted in the explicit "psram" override field.
@@ -134,12 +134,14 @@ def _psram_bus_for_size(size_mb: int, code: str, out: ModuleSpec) -> str:
     """Decide quad vs octal from the PSRAM size digit."""
     if size_mb <= 0:
         return "none"
-    if size_mb >= _OCTAL_MIN_MB:
+    if size_mb in (8, 16):
         return "octal"
     if size_mb in (1, 2, 4):
         return "quad"
-    # 3, 5, 6, 112, 162 ... -> vendor-specific codes, stay conservative.
+    # Anything else (3, 5, 112, 162 ...) is a vendor-specific code we cannot
+    # decode - stay conservative: quad reserves the fewest GPIOs.
     out.unknown = True
+    out.psram_size_mb = None
     out.warnings.append(
         f"PSRAM code '{code}' does not decode to a standard 1/2/4/8/16 MB size. "
         f"Assuming a quad (QSPI) PSRAM bus, which reserves the fewest GPIOs. "

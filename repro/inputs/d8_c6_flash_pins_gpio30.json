@@ -1,0 +1,22 @@
+{
+  "platform": "esp32",
+  "variant": "esp32c6",
+  "module": "WROOM",
+  "wifi_enabled": false,
+  "pins": [
+    {
+      "gpio": 30,
+      "function": "SPI_MOSI",
+      "protocol_bus": "spi",
+      "device": "external flash",
+      "direction": "output"
+    },
+    {
+      "gpio": 27,
+      "function": "LED",
+      "protocol_bus": "gpio",
+      "device": "Status LED",
+      "direction": "output"
+    }
+  ]
+}

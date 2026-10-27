@@ -1,0 +1,36 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM",
+  "wifi_enabled": false,
+  "pins": [
+    {
+      "gpio": 22,
+      "function": "LED22",
+      "protocol_bus": "gpio",
+      "device": "LED",
+      "direction": "output"
+    },
+    {
+      "gpio": 23,
+      "function": "LED23",
+      "protocol_bus": "gpio",
+      "device": "LED",
+      "direction": "output"
+    },
+    {
+      "gpio": 24,
+      "function": "LED24",
+      "protocol_bus": "gpio",
+      "device": "LED",
+      "direction": "output"
+    },
+    {
+      "gpio": 25,
+      "function": "LED25",
+      "protocol_bus": "gpio",
+      "device": "LED",
+      "direction": "output"
+    }
+  ]
+}

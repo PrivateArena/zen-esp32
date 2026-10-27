@@ -122,9 +122,18 @@ ADC1 has its own dedicated hardware and works regardless of WiFi state:
 
 ### SPI Flash Pins (GPIO6-11) — NEVER USE
 These pins are hardwired to the SPI flash memory chip inside the module. Using them will immediately crash the ESP32.
+Other variants use different pads: S2/S3 GPIO26-32, C3 GPIO12-17, C6 GPIO24-26 + 28-30.
 
 ### PSRAM Pins (GPIO16-17) — WROVER Only
-ESP32-WROVER modules include onboard PSRAM that uses GPIO16 and GPIO17.
+ESP32-WROVER modules include onboard quad PSRAM that uses GPIO16 and GPIO17.
+
+### Octal PSRAM (ESP32-S3 `N*R8` / `N*R16`) — GPIO33-37
+On an ESP32-S3 module with **8 MB or 16 MB octal (OPI) PSRAM**, GPIO33-37 are the
+PSRAM data lines SPIIO4-7 and the strobe SPIDQS. They are then not user pins in
+any boot mode, and both the flash and the PSRAM share the VDD_SPI rail that those
+pads are powered from. Decoding the module ordering code (`N16R8` = 16 MB flash,
+8 MB octal PSRAM) is therefore a pin-planning step, not a datasheet nicety —
+see `references/esp32-s3/modules.md`. Quad PSRAM (`N*R2`) needs no extra pins.
 
 ---
 
@@ -132,6 +141,8 @@ ESP32-WROVER modules include onboard PSRAM that uses GPIO16 and GPIO17.
 
 ### GPIO34, 35, 36, 39 — Hardware Limitations
 These four pins CANNOT be used for digital output, I2C, SPI MOSI/SCLK, or UART TX. They have no internal pull resistors.
+(Others of that family, GPIO37/38, additionally are not bonded out on WROOM-32.)
+On ESP32-S2/S3 the only input-only pad is GPIO46; on C3/C6 there is none.
 
 ---
 

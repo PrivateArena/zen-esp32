@@ -8,6 +8,10 @@
 - [Flash and PSRAM Reservations](#flash-and-psram-reservations)
   - [GPIO6-11: SPI Flash (NEVER USE)](#gpio6-11-spi-flash-never-use)
   - [GPIO16-17: PSRAM (WROVER Only)](#gpio16-17-psram-wrover-only)
+- [Per-Variant Holes, Octal PSRAM and USB Pads](#per-variant-holes-octal-psram-and-usb-pads)
+  - [GPIO numbers that do not exist](#gpio-numbers-that-do-not-exist)
+  - [Octal (OPI) PSRAM reserves GPIO33-37 on ESP32-S3](#octal-opi-psram-reserves-gpio33-37-on-esp32-s3)
+  - [Native USB pads](#native-usb-pads)
 - [Protocol Pin Groups](#protocol-pin-groups)
   - [I2C (Conventional Defaults)](#i2c-conventional-defaults)
   - [SPI Buses](#spi-buses)
@@ -132,6 +136,65 @@ These pins are hardwired to the SPI flash chip on all ESP32 modules:
 
 ---
 
+## Per-Variant Holes, Octal PSRAM and USB Pads
+
+The table above is the **original ESP32**. The other variants are not supersets —
+they have holes, extra reservations, and different peripheral counts.
+
+### GPIO numbers that do not exist
+
+Some GPIO numbers have no pad at all on a given die. `SOC_GPIO_PIN_COUNT` is
+"highest GPIO number + 1", so it *over-counts* on S2/S3. Verified against the
+IOMUX register map (`ESP-IDF components/soc/<variant>/register/soc/io_mux_reg.h`):
+
+| Variant | GPIOs present | Numbers with **no pad** | Pads |
+|---|---|---|---|
+| ESP32 | 0-19, 21-23, 25-39 | 28, 29, 30, 31 (and 20/24 unbonded) | 36 |
+| ESP32-S2 | 0-21, 26-46 | **22, 23, 24, 25** | 43 |
+| ESP32-S3 | 0-21, 26-48 | **22, 23, 24, 25** | 45 |
+| ESP32-C3 | 0-21 | — | 22 |
+| ESP32-C6 | 0-30 | — | 31 |
+
+Assigning GPIO22-25 on an S3 is not a "reserved pin" problem — there is nothing
+to configure, and the design the number belongs to simply will not work.
+
+### Octal (OPI) PSRAM reserves GPIO33-37 on ESP32-S3
+
+| Module class | Extra pins claimed by PSRAM |
+|---|---|
+| no PSRAM (`N8`, `N16`) | none |
+| quad PSRAM (`N*R2`, `N*R4`) | none — shares the flash bus GPIO26-32 |
+| **octal PSRAM (`N*R8`, `N*R16`)** | **33 (SPIIO4), 34 (SPIIO5), 35 (SPIIO6), 36 (SPIIO7), 37 (SPIDQS)** |
+
+Source: `soc/esp32s3/include/soc/spi_pins.h` (`MSPI_IOMUX_PIN_NUM_D4…DQS`) and the
+eFuse `PIN_POWER_SELECTION` = "Set default power supply for GPIO33-GPIO37".
+This is the single most expensive pinmap mistake on the S3: the board boots,
+`heap_caps` reports PSRAM, and random memory corruption appears only under load.
+Decode the module code (see `references/esp32-s3/modules.md`) before placing a
+single trace.
+
+### Native USB pads
+
+ESP32-S2 and ESP32-S3 route the internal USB PHY to **GPIO19 (D-) and GPIO20 (D+)**
+(`soc/<variant>/include/soc/usb_pins.h`). On the S3 those pads are simultaneously
+UART1 RTS/CTS and ADC2_CH8/CH9. If the board is flashed or monitored over the
+c_chip's own USB, both pins are consumed for the whole life of the product.
+
+### LEDC (PWM) channels per variant
+
+| Variant | LEDC channels | RMT TX channels |
+|---|---|---|
+| ESP32 | 16 (8 high-speed + 8 low-speed) | 8 |
+| ESP32-S2 | 8 | 4 |
+| ESP32-S3 | **8** | 4 |
+| ESP32-C3 | 6 | 2 |
+| ESP32-C6 | 6 | 2 |
+
+Source: `SOC_LEDC_CHANNEL_NUM` / `SOC_RMT_TX_CANDIDATES_PER_GROUP`; the Arduino
+core doubles LEDC only where `SOC_LEDC_SUPPORT_HS_MODE` exists (original ESP32).
+
+---
+
 ## Protocol Pin Groups
 
 ### I2C (Conventional Defaults)
@@ -198,7 +261,8 @@ ESP32 has two user-accessible SPI buses:
 
 ESP32 PWM uses the LEDC peripheral, which can output to any GPIO:
 
-- **Channels:** 16 (8 high-speed, 8 low-speed)
+- **Channels:** ESP32 16 (8 high-speed + 8 low-speed); **S2/S3 8**; C3/C6 6 — see
+  [LEDC channels per variant](#ledc-pwm-channels-per-variant)
 - **Resolution:** 1-16 bits
 - **Frequency:** Up to 40MHz (hardware dependent on duty resolution)
 - **Any output-capable GPIO works** — no fixed PWM pins like RPi
@@ -330,13 +394,20 @@ RTC GPIOs can wake the ESP32 from deep sleep and be controlled by the ULP coproc
 | **Bluetooth** | Classic + BLE | **None** | BLE 5.0 | BLE 5.0 | BLE 5.0 |
 | **WiFi** | 802.11 b/g/n | 802.11 b/g/n | 802.11 b/g/n | 802.11 b/g/n | **802.11ax (WiFi 6)** |
 | **Thread/Zigbee** | No | No | No | No | **Yes** |
-| **Flash Pins** | GPIO6-11 | GPIO26-32 | GPIO26-32 | GPIO12-17 | GPIO24-29 |
+| **Flash Pins** | GPIO6-11 | GPIO26-32 | GPIO26-32 | GPIO12-17 | GPIO24-26, 28-30 |
 | **Strapping Pins** | 0, 2, 5, 12, 15 | 0, 45, 46 | 0, 3, 45, 46 | 2, 8, 9 | 8, 9, 15 |
+| **GPIO numbers with no pad** | 20, 24, 28-31 | 22-25 | **22-25** | — | — |
+| **Octal PSRAM (N*R8) extra reservation** | n/a | n/a | **GPIO33-37** | n/a | n/a |
+| **LP core** | No | No | Yes (RISC-V) | No | No (HP core is RISC-V) |
 
 ### Key Variant Notes
 
 - **ESP32-C3/C6:** No ADC2/WiFi conflict — all ADC channels work with WiFi
 - **ESP32-S2/S3:** USB OTG requires GPIO19/20 — reserve if using native USB
+- **ESP32-S2/S3:** GPIO22-25 do not exist; only GPIO0-21 have ADC, touch and
+  deep-sleep wake (GPIO26-48 are high-performance pads only)
+- **ESP32-S3 octal-PSRAM modules (N*R8):** GPIO33-37 belong to the PSRAM
+- **ESP32-C6:** flash pins are GPIO24-26 + 28-30 (GPIO27 is a free pin)
 - **ESP32-C6:** Only variant with WiFi 6 and Thread/Zigbee support
 - **Touch sensing:** Only original ESP32, S2, and S3 have capacitive touch
 - **DAC:** Only original ESP32 and S2 have analog output capability

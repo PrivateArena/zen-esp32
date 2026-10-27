@@ -16,12 +16,12 @@ position (see §9). 4 new blockers, none fatal; the only one that needs you is t
 |---|---|---|
 | P0.1 `arduino-cli` | ✅ done | `arduino-cli version` = 1.5.2-rc.1, `core list` = `esp32:esp32 3.3.12` |
 | P0.2 `esptool` + pyserial | ✅ done | `esptool v5.6.0`, `pyserial-miniterm`, `pyserial-ports` in `~/.local/bin` |
-| P0.3 re-login for `dialout` | ❌ **still open** | `id -nG` still lacks `dialout`; every command this session ran under `sg dialout -c` |
+| P0.3 re-login for `dialout` | ✅ **done (user, after PC restart)** | `id -nG` → `jang adm dialout cdrom sudo dip plugdev users lpadmin sambashare docker`; no `sg` wrapper needed any more this session |
 | P1.4 ESP-IDF | ✅ done, **v5.5.6 not v5.3.2**, portable `./idf` + `./tools` | `idf.py build` of `hello_world` → `Project build complete`, exit 0 |
 | P1.5 IDF venv extras | ✅ done | `tools/python_env` present, `idf.py`/`idf_size.py`/`idf_monitor.py` run |
 | P2 PlatformIO | ➖ skipped (correct call) | arduino-cli + IDF cover both workflows |
 | Rev 1 §7.3 smoke test | ✅ done | PSRAM 8 MB detected + 1 MB write OK; `E (25) qio_mode` gone (DIO image header) |
-| Rev 1 §7.4 skill D1–D7 patches | ❌ not started | `repro/run.sh` re-run: D1/D2/D5 still `valid=True`, D3 still non-JSON (§13) |
+| Rev 1 §7.4 skill D1–D7 patches | ✅ **done** | all D1-D7 fixed + D8 found, 96/96 tests, `repro/run.sh` asserts and exits 0 — see §17 |
 
 ---
 
@@ -125,13 +125,14 @@ consistent with "single USB-C + CH9102 auto-mux + WS2812 on 48".
 
 ```bash
 cd /media/jang/home/Deve/zen-esp32
-PORT=/dev/serial/by-path/pci-0000:0d:00.0-usb-0:4.4:1.0   # same node for both bridges, see §9.3
+# NOTE (§17): the by-path node changed after the PC restart — resolve it, do not copy a literal:
+PORT=$(ls -1 /dev/serial/by-path/* | head -1)     # was usb-0:4.4, now pci-0000:0d:00.0-usb-0:12:1.0
 FQ='esp32:esp32:esp32s3:FlashMode=dio,FlashSize=16M,PSRAM=opi,CDCOnBoot=cdc,USBMode=hwcdc,UploadMode=default,PartitionScheme=app3M_fat9M_16MB,UploadSpeed=921600'
 
 arduino-cli compile --fqbn "$FQ" --build-path build sketch/         # 4 s incremental
-sg dialout -c "arduino-cli upload --input-dir build --fqbn '$FQ' --port $PORT -v"
-sg dialout -c "python3 repro/uart_tail.py $PORT 5"                # NON-destructive capture: no DTR/RTS pulse
-sg dialout -c "python3 repro/uart_probe.py $PORT 115200 5"        # capture WITH a board reset (see note)
+arduino-cli upload --input-dir build --fqbn "$FQ" --port $PORT -v    # dialout is active now (B1 closed)
+python3 repro/uart_tail.py $PORT 5                                  # NON-destructive capture: no DTR/RTS pulse
+python3 repro/uart_probe.py $PORT 115200 5                          # capture WITH a board reset (see note)
 # repro/uart_tail.py = pure termios reader, no pyserial, prints raw bytes for N seconds.
 # USB-Serial-JTAG (HWCDC) ignores the baud rate entirely — no 115200 handshake needed
 ```
@@ -214,24 +215,13 @@ CLI use, may confuse the VS Code ESP-IDF extension.
 
 ## 12. Remaining blockers
 
-**B1 — `dialout` still not in the session `[VERIFIED]`.** `getent group dialout` → `dialout:x:20:jang`,
-but `id -nG` has no `dialout`; direct open → `[Errno 13]`. Rev 1's `sg dialout -c` wrapper is still the
-only in-session workaround and it is needed for **every** port touch (`arduino-cli`, `esptool`, probes).
-`sudo -n` needs a password, so run one of these yourself:
-```bash
-# quick, lost on replug:
-sudo setfacl -m u:jang:rw /dev/ttyACM0
-# permanent, ALSO fixes B2 (note SUBSYSTEM=="usb" — MODE on the tty alone is not enough for OpenOCD):
-sudo tee /etc/udev/rules.d/99-esp32s3.rules >/dev/null <<'EOF'
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="0666", SYMLINK+="esp32s3-console"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", MODE="0666", SYMLINK+="esp32s3-console"
-SUBSYSTEM=="usb",  ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="0666"
-EOF
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
-(Or just log out/in — that also kills the need for `sg`.)
+**B1 — ✅ CLOSED (this session).** Re-login done: `id -nG` now contains `dialout`, and every
+`esptool` / `espefuse` / `arduino-cli upload` / `uart_tail.py` call in §17 ran without `sg`.
+`getent group dialout` → `dialout:x:20:jang`.
 
-**B2 — on-chip JTAG: USB node permissions `[VERIFIED]`.** OpenOCD reaches the adapter but cannot open it:
+**B2 — on-chip JTAG: USB node permissions `[VERIFIED]`.** Still open: `/etc/udev/rules.d/` is
+empty and `/dev/bus/usb/001/031` (the `303a:1001` device) is still `crw-rw-r-- root:root`, so
+`dialout` does not cover it. OpenOCD reaches the adapter but cannot open it:
 ```
 $ openocd -f board/esp32s3-builtin.cfg -c "adapter speed 2000" -c "init; targets; shutdown"
 Info : esp_usb_jtag: capabilities descriptor set to 0x2000
@@ -239,9 +229,21 @@ Error: libusb_open() failed with LIBUSB_ERROR_ACCESS
 Error: esp_usb_jtag: could not find or open device!
 ```
 `/dev/bus/usb/001/048` = `crw-rw-r-- root:root` — group is `root`, so `sg dialout` does **not** help;
-needs the `SUBSYSTEM=="usb"` rule above (or `sudo openocd`). Also: use `board/esp32s3-builtin.cfg`
+needs the `SUBSYSTEM=="usb"` rule below (or `sudo openocd`). Also: use `board/esp32s3-builtin.cfg`
 (→ `interface/esp_usb_jtag.cfg`), **not** `interface/usb-jtag.cfg` (that one is the FTDI
 `usb_blaster` "Van Ooijen" adapter and dies with a `usb_blaster` syntax error).
+
+Still to run by hand (`sudo -n` needs a password):
+```bash
+sudo tee /etc/udev/rules.d/99-esp32s3.rules >/dev/null <<'EOF'
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="0666", SYMLINK+="esp32s3-console"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", MODE="0666", SYMLINK+="esp32s3-console"
+SUBSYSTEM=="usb",  ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="0666"
+EOF
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+The tty lines are convenience only (they add a stable `esp32s3-console` symlink, which also
+sidesteps B3); the `SUBSYSTEM=="usb"` line is what actually unblocks B2/JTAG.
 
 **B3 — `/dev/ttyACM0` vanishes during mux flips** — see §9.3; always script against
 `/dev/serial/by-path/…`.
@@ -258,6 +260,9 @@ of output even under `script -qec` and with `--raw`. `--describe` works. For scr
 ---
 
 ## 13. Skill defects D1–D7: unchanged `[VERIFIED]` (re-run this session)
+
+> Superseded later in the same session: §17 re-runs all of these as assertions and they now pass.
+> Kept verbatim as the "before" record.
 
 ```
 $ repro/run.sh
@@ -321,8 +326,10 @@ already models `PIN_RGB_LED=48`; the skill should read that constant rather than
 
 ## 16. Next sequence
 
-1. **B1 + B2**: re-login (or the udev rules above). Then drop all `sg dialout -c` wrappers — the
-   scripts in `repro/` and any CI runner will otherwise keep needing `sg`.
+*(status after this session: 1 done, 5 done — see §17; 2, 3, 4, 6 still open)*
+
+1. **B1 + B2**: ✅ B1 done by re-login (no more `sg` anywhere in this session); ❌ B2 still needs the
+   udev rule from §12. The scripts in `repro/` no longer carry `sg` wrappers.
 2. **Answer rev 1 §4.10** (in-repo vs `~/Arduino`) so `repro/firmware/*` can move into the project as
    `firmware/psram_smoke` and `firmware/rgb_blink`, plus a committed `arduino-cli` profile
    (`--build-property`-free: the FQBN string in §10.1 is already exact).
@@ -332,5 +339,114 @@ already models `PIN_RGB_LED=48`; the skill should read that constant rather than
    and confirm whether HWCDC (`CDCOnBoot=cdc`) leaves the JTAG interface claimable while the app runs.
 5. **Patch skill D1→D5** with a regression fixture per fix (rev 1 §5 list is still accurate); D4's
    expected output should change to `rgbLedWrite` now that GPIO48 is known to be `PIN_RGB_LED`.
+   ✅ done — §17 (D1-D7 plus one new defect, D8).
 6. Optional: pin a second profile for the CH9102-only case (`CDCOnBoot=default`) so both cable
    positions have a known-good FQBN.
+
+---
+
+## 17. Rev 1 §7.4 executed: skill defects D1-D7 patched `[VERIFIED]`
+
+Session on the restarted PC: `dialout` active, board on `/dev/ttyACM0` as `303a:1001`, no `sg` needed.
+
+### 17.1 Hardware inspection (the input to the patch)
+
+```bash
+PORT=$(ls -1 /dev/serial/by-id/*Espressif* | head -1)
+esptool  --chip esp32s3 --port $PORT chip-id
+esptool  --chip esp32s3 --port $PORT flash-id
+espefuse --chip esp32s3 --port $PORT summary
+```
+
+| Fact | Value | Source |
+|---|---|---|
+| Chip | ESP32-S3 QFN56 **rev v0.2**, dual LX7 + **LP core**, 240 MHz | `chip-id` |
+| Crystal | **40 MHz** | `chip-id` |
+| PSRAM | **8 MB, octal, `AP_3v3`, 85 °C** | `chip-id` + eFuse `PSRAM_CAP/VENDOR/TEMP` |
+| Flash | **16 MB**, vendor `1c:7018` (XMC) | `flash-id` |
+| eFuse `FLASH_TYPE` | **4 data lines (quad)** | `espefuse summary` |
+| eFuse `VDD_SPI_*` | `FORCE=1`, `TIEH=VDD3P3_RTC_IO` → **3.3 V** | `espefuse summary` |
+| eFuse `PIN_POWER_SELECTION` | `VDD_SPI`, described by Espressif as "default power supply for **GPIO33-GPIO37**" | `espefuse summary` |
+| eFuse `DIS_USB_JTAG` | False → on-chip JTAG pad path is alive (B2 is purely a permissions issue) | `espefuse summary` |
+| MAC | 68:ee:8f:5a:c4:44 | `chip-id` |
+
+⇒ **module class = `N16R8`** (16 MB quad flash + 8 MB octal PSRAM). There is no eFuse holding the
+module part number; the memory geometry above is what identifies it.
+
+Cross-checked against the installed SDKs (not against memory):
+`soc/esp32s3/include/soc/spi_pins.h` (MSPI pads GPIO26-32 + octal `D4..DQS` = **GPIO33-37**),
+`register/soc/io_mux_reg.h` (**no pad for GPIO22-25**; `MTCK/MTDO/MTDI/MTMS` = 39/40/41/42,
+`XTAL_32K_P/N` = 15/16, `U0TXD/U0RXD` = 43/44, `SPICLK_P/N` = 47/48),
+`soc/adc_channel.h` (ADC1=1-10, ADC2=11-20), `soc/touch_sensor_channel.h` (1-14),
+`soc/rtc_io_channel.h` (**RTC GPIOs = 0-21 only**), `soc/usb_pins.h` (`DM=19, DP=20` — same on S2),
+`soc/soc_caps.h` (**`SOC_LEDC_CHANNEL_NUM 8`**, `SOC_RMT_TX_CANDIDATES_PER_GROUP 4`, 3 UARTs),
+Arduino core 3.3.12 `variants/esp32s3/pins_arduino.h` (`PIN_RGB_LED 48`, `SDA 8/SCL 9`,
+`MOSI 11/MISO 13/SCK 12`), `esp32-hal-rgb-led.h`, `HardwareSerial.{h,cpp}` (`Serial0` exists,
+`begin(baud, config, rx, tx)`), `esp32-hal-ledc.c` (`LEDC_CHANNELS` is doubled only on the
+original ESP32).
+
+### 17.2 What was wrong and what it is now
+
+| # | Defect | Fix |
+|---|---|---|
+| **D1** | OPI PSRAM reservation missing → GPIO33-37 sold as free | `scripts/platforms/modules.py` decodes the module ordering code; `_PSRAM_OCTAL_PINS` + module-aware `_effective_psram_pins()` → **error** `PSRAM_PIN` naming SPIIO4-7/SPIDQS. `N*R8`/`N*R16` → reserved; `N*R2` (quad) → not reserved; no-PSRAM module → free. Also emit `CONFIG_SPIRAM_MODE_OCT` / `PSRAM=opi` hints in `generate_config`. |
+| **D2** | S3 pin DB was a stub; GPIO22-25 "free"; 41/49 pins had no functions | `_NONEXISTENT_PINS` (S2/S3 = 22-25) → those numbers are **absent from the DB**, `get_pin()` raises "does not exist", validate emits `NON_EXISTENT_PIN`. 45 pads for S3, 43 for S2. `_get_alternate_functions()` now merges ADC/touch/RTC/USB/JTAG/MSPI/GPSPI-octal/strap/pad-name → **every S3 pad has fixed functions**. |
+| **D3** | `"module": "WROOM-18N Octal PSRAM"` aborted with no JSON | New module vocabulary: legacy `WROOM/WROVER`, real codes (`N16R8`, `ESP32-S3-WROOM-1-N16R8`, `MINI-1-N4`, `SOLO-1`, …), plus a new **`"psram": {"mode": "octal|quad|none", "size_mb": n}`** override that wins over the string. Unknown strings → `MODULE_UNKNOWN` warning, validation continues, JSON always emitted (exit 0/1, never 2 for a bad module). |
+| **D4** | WS2812 → `ledcAttach()`; UART pins dropped; I2C addr `0x00` | WS2812-family pins are categorised separately (`_is_ws2812`, APA102/SPI excluded) → Arduino `rgbLedWrite(RGB_BUILTIN, …)` for GPIO48 (core's pseudo-pin) / `rgbLedWrite(pin, …)` elsewhere, ESP-IDF `rmt_new_tx_channel` + `rmt_new_bytes_encoder` with real WS2812 timings and `esp_check.h`. UART: per-port grouping, right object (`Serial0/1/2`), declared pads, console-aware baud, warning for missing TX/RX, note that UART2 has no default pads. I2C addresses from `common-devices.md` (SSD1306 → 0x3C …), placeholder is now labelled. |
+| **D5** | GPIO19/20 (native USB) produced no warning | `_USB_PINS` → `USB_PIN` warning on S2 **and** S3, message names the collateral damage (UART1 RTS/CTS, ADC2_CH8/9); pin DB marks `USB` + `USB_NATIVE`. |
+| **D6** | 50 tests blind to all of the above | 50 → **96 tests** (`tests/test_module_and_pinmap_defects.py`, `tests/test_code_fidelity.py`) + 7 new fixtures; all 96 pass, the 50 pre-existing ones unchanged. |
+| **D7** | `specs.md` omissions | `references/esp32-s3/specs.md` rewritten with sourced facts (GPIO holes, octal pins, LP core, VDD_SPI/3.3 V interaction, 40 vs 26 MHz, USB pads, LEDC=8, RMT=4, RTC=0-21, GPIO48/WS2812 note). New `references/esp32-s3/modules.md`: ordering-code table, reserved-pin table per module class, the §17.1 commands with this board's real output as the worked example, and the `zen-esp32` bring-up profile (FQBN + IDF sdkconfig + the two USB-mux traps). `esp32-pins.md` and `esp32-specifics.md` got the same facts; `SKILL.md` gained the guardrails, the schema/`psram` field, the error contract and the error-code list. |
+| **D8 (new)** | `_FLASH_PINS_ESP32C6` = {24,25,26,**27**,28,**29**} | IDF `spi_pins.h` for C6: CS0=24, MISO=25, WP=26, HD=28, CLK=29, MOSI=**30**. Old table had one false positive (GPIO27, a free pin) *and* one false negative (GPIO30, real flash pad). Fixed + regression fixture. Also fixed: LEDC channel budget for S2/S3 was 16, is **8** (Arduino core `LEDC_CHANNELS` doubles only where `SOC_LEDC_SUPPORT_HS_MODE`). |
+
+### 17.3 Verification
+
+```
+$ (cd esp32-skills && python3 -m pytest -q tests/)          → 96 passed
+$ (cd repro && ./run.sh)                                    → ALL CASES PASS, exit 0
+```
+
+`repro/run.sh` is no longer a print-out: it asserts every case (new `repro/check.py` helper, which
+also *fails on non-JSON output*, i.e. it keeps D3's original symptom under test). Inputs updated:
+`d1_*` now declares the real module code; added `d1b_*` (psram override) and `d8_c6_flash_pins_gpio30.json`.
+
+**Hardware-in-the-loop proof of D4** (the codegen claim is now executed, not argued):
+
+```bash
+PORT=$(ls -1 /dev/serial/by-id/*Espressif* | head -1)
+python3 - <<'PY'   # generate Arduino code straight from the skill
+import sys, json; sys.path.insert(0, "esp32-skills/scripts")
+from platforms import get_platform
+d = json.load(open("repro/inputs/baseline_s3_devkit.json"))
+open("/tmp/gen_check/gen_check.ino", "w").write(
+    get_platform("esp32", "esp32s3", d["module"]).generate_code(d, "arduino"))
+PY
+arduino-cli compile --fqbn "$FQ" --build-path /tmp/gen_check/build /tmp/gen_check
+# → Sketch uses 339608 bytes (10%), Global variables 24376 bytes (7%)   [compiles for the real target]
+arduino-cli upload --input-dir /tmp/gen_check/build --fqbn "$FQ" --port $PORT   # Hash of data verified
+python3 repro/uart_probe.py $PORT 115200 4
+# → mode:DIO, clock div:1 … / GPIO initialized
+```
+Board then re-flashed with `repro/firmware/rgb_blink` and confirmed cycling RED/GREEN/BLUE/WHITE
+(§9.1 evidence state restored). The generated code is DIO-headed, which independently confirms the
+`FlashMode=dio,PSRAM=opi` library variant still holds for skill-generated builds.
+
+### 17.4 Skill files touched
+
+```
+scripts/platforms/modules.py                    NEW  — ordering-code decoder (ModuleSpec)
+scripts/platforms/__init__.py                   rewritten factory: never aborts on a module string
+scripts/platforms/base.py                       ModuleSpec plumbing + 4 new ConflictType codes
+scripts/platforms/esp32.py                      data tables, validate(), Arduino + ESP-IDF codegen
+scripts/validate_pinmap.py, scripts/generate_config.py   always-JSON error envelopes, psram field
+references/esp32-s3/specs.md                    D7 rewrite
+references/esp32-s3/modules.md                  NEW  — module codes + identification recipe
+references/platforms/esp32-pins.md              holes, octal pins, USB pads, LEDC table, C6 flash pins
+references/platforms/esp32-specifics.md         octal PSRAM + input-only per variant
+skills/esp32/SKILL.md, README.md                guardrails, schema, error contract, code list
+tests/{test_module_and_pinmap_defects,test_code_fidelity}.py + 7 fixtures        D6
+repro/{run.sh,check.py,README.md,inputs/*}      assertions instead of print-outs
+```
+
+`plugin.json` and the `SKILL.md` frontmatter bumped 1.0.0 → 1.1.0 (behaviour change: new
+input field, new error codes, different codegen).
+

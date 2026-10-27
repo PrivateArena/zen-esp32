@@ -204,6 +204,18 @@ _MSPI_OCTAL_SIGNALS: Dict[int, str] = {
     33: "SPIIO4", 34: "SPIIO5", 35: "SPIIO6", 36: "SPIIO7", 37: "SPIDQS",
 }
 
+# GPSPI (SPI2) pads used when the *user* SPI bus is put in octal mode:
+# IDF soc/esp32s3/include/soc/spi_pins.h, SPI2_IOMUX_PIN_NUM_*_OCT. Only matters
+# for octal-mode external flash/PSRAM on SPI2, but it is the reason GPIO38 is not
+# a completely free pin on an S3 board.
+_SPI2_OCTAL_PINS: Dict[str, Dict[int, str]] = {
+    "esp32s3": {
+        33: "SPI2_HD", 34: "SPI2_CS", 35: "SPI2_MOSI", 36: "SPI2_CLK",
+        37: "SPI2_MISO", 38: "SPI2_WP", 10: "SPI2_IO4", 11: "SPI2_IO5",
+        12: "SPI2_IO6", 13: "SPI2_IO7",
+    },
+}
+
 # Low-power (RTC) GPIOs that keep functioning in deep sleep and can drive
 # wake-up sources. Source: soc/<variant>/include/soc/rtc_io_channel.h.
 _RTC_GPIO_PINS: Dict[str, Set[int]] = {
@@ -592,6 +604,15 @@ class Esp32Platform(Platform):
         octal_signal = _MSPI_OCTAL_SIGNALS.get(gpio_num)
         if octal_signal and self.variant == "esp32s3":
             alt_funcs["MSPI_OPI"] = f"{octal_signal} - octal PSRAM/flash only"
+
+        gpspi_oct = _SPI2_OCTAL_PINS.get(self.variant, {}).get(gpio_num)
+        if gpspi_oct:
+            alt_funcs["SPI2_OPI"] = f"{gpspi_oct} - only when GPSPI runs in octal mode"
+
+        if gpio_num in self._get_strapping_pin_set():
+            alt_funcs["STRAP"] = self._get_strapping_pins().get(
+                gpio_num, "strapping pin"
+            )
 
         if gpio_num in _JTAG_PINS.get(self.variant, {}):
             alt_funcs["JTAG"] = _JTAG_PINS[self.variant][gpio_num]
@@ -1944,7 +1965,13 @@ class Esp32Platform(Platform):
 
         # Setup function
         lines.append("void setup() {")
-        lines.append("    Serial.begin(115200);")
+        uart_ports = self._group_uart_pins(categories["uart"]) if categories["uart"] else {}
+        console_on_other_pins = self._uart0_is_remapped(uart_ports.get(0)) if 0 in uart_ports else False
+        if console_on_other_pins:
+            lines.append("    // UART0 (the console bus) is re-assigned below; Serial.begin()")
+            lines.append("    // is called there so the log lands on the requested pads.")
+        else:
+            lines.append("    Serial.begin(115200);")
         lines.append("")
 
         # I2C initialization
@@ -1963,6 +1990,9 @@ class Esp32Platform(Platform):
         if categories["uart"]:
             uart_init = self._build_arduino_uart_init(categories, symbol_map)
             lines.extend(uart_init)
+            if console_on_other_pins:
+                lines.append("    Serial.begin(115200);  // console on the pads above "
+                             "(Serial = UART0 unless USB CDC On Boot is Enabled)")
             lines.append("")
 
         # GPIO outputs
@@ -2313,6 +2343,20 @@ class Esp32Platform(Platform):
         """
         return "Serial0" if port == 0 else f"Serial{port}"
 
+    def _uart0_is_remapped(self, entry: Optional[Dict[str, Any]]) -> bool:
+        """True when a UART0 pin map points at pads other than this variant's defaults."""
+        if not entry:
+            return False
+        group = self._groups.get("UART0")
+        if not group:
+            return False
+        defaults = set(group.pins.values())
+        for key in ("tx", "rx"):
+            pin = entry.get(key)
+            if pin is not None and pin.get("gpio") not in defaults:
+                return True
+        return False
+
     def _build_arduino_uart_init(
         self, categories: Dict[str, List[Dict[str, Any]]],
         symbol_map: Dict[int, str]
@@ -2369,7 +2413,6 @@ class Esp32Platform(Platform):
         if categories["pwm"]:
             max_channels = self._get_ledc_channels()
             lines.append(f"    // PWM setup (LEDC, {self.variant}: max {max_channels} channels)")
-            lines.append("    // Note: ESP32 Arduino core >=3.0 uses ledcAttach(pin, freq, resolution)")
             for pin in categories["pwm"][:max_channels]:
                 gpio = pin.get("gpio", 0)
                 speed = pin.get("speed_hz", 0)
@@ -2622,6 +2665,7 @@ class Esp32Platform(Platform):
             # RMT is the peripheral that meets WS2812 bit timing; LEDC cannot.
             lines.append('#include "driver/rmt_tx.h"')
             lines.append('#include "driver/rmt_encoder.h"')
+            lines.append('#include "esp_check.h"   // ESP_RETURN_ON_ERROR')
 
         if categories["adc"]:
             lines.append('#include "driver/adc.h"')

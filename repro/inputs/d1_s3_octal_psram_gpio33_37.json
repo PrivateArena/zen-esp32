@@ -1,7 +1,7 @@
 {
   "platform": "esp32",
   "variant": "esp32s3",
-  "module": "WROOM",
+  "module": "ESP32-S3-WROOM-1-N16R8",
   "wifi_enabled": true,
   "pins": [
     {

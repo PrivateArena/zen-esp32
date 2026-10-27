@@ -1,0 +1,23 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM-18N Octal PSRAM",
+  "wifi_enabled": false,
+  "pins": [
+    {
+      "gpio": 4,
+      "function": "BUTTON",
+      "protocol_bus": "gpio",
+      "device": "Btn",
+      "direction": "input",
+      "pull": "up"
+    },
+    {
+      "gpio": 37,
+      "function": "SPI_CLK",
+      "protocol_bus": "spi",
+      "device": "Display",
+      "direction": "output"
+    }
+  ]
+}

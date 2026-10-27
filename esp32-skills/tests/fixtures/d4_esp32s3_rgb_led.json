@@ -1,0 +1,39 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "N16R8",
+  "wifi_enabled": false,
+  "pins": [
+    {
+      "gpio": 48,
+      "function": "WS2812_BUILTIN",
+      "protocol_bus": "pwm",
+      "device": "NeoPixel",
+      "direction": "output",
+      "speed_hz": 800000
+    },
+    {
+      "gpio": 14,
+      "function": "WS2812_STRIP",
+      "protocol_bus": "pwm",
+      "device": "NeoPixelStrip",
+      "direction": "output"
+    },
+    {
+      "gpio": 7,
+      "function": "PWM_FAN",
+      "protocol_bus": "pwm",
+      "device": "Fan",
+      "direction": "output",
+      "speed_hz": 25000
+    },
+    {
+      "gpio": 1,
+      "function": "UART0_TX",
+      "protocol_bus": "uart",
+      "device": "Console",
+      "direction": "output",
+      "speed_hz": 115200
+    }
+  ]
+}

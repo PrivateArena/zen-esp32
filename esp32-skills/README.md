@@ -77,18 +77,18 @@ Both scripts accept the same JSON structure:
 ```json
 {
   "platform": "esp32s3",
-  "module": "WROOM",
+  "module": "ESP32-S3-WROOM-1-N16R8",
   "wifi_enabled": true,
   "pins": [
     {
-      "gpio": 21,
+      "gpio": 8,
       "function": "I2C_SDA",
       "protocol_bus": "i2c",
       "device": "BME280",
       "pull": "external_up"
     },
     {
-      "gpio": 22,
+      "gpio": 9,
       "function": "I2C_SCL",
       "protocol_bus": "i2c",
       "device": "BME280",
@@ -97,6 +97,11 @@ Both scripts accept the same JSON structure:
   ]
 }
 ```
+
+`module` takes the legacy class (`WROOM`, `WROVER`) or a real ordering code —
+`N16R8`, `N8R2`, `ESP32-S3-WROOM-1-N16R8`, `MINI-1-N4`, … — which is decoded into
+flash size, PSRAM size and PSRAM bus width. Alternatively (or additionally)
+describe the memory directly: `"psram": {"mode": "octal", "size_mb": 8}`.
 
 ## Supported Variants
 
@@ -118,12 +123,17 @@ The plugin actively prevents these common hardware mistakes:
 
 | Check | What It Catches |
 |-------|----------------|
-| **GPIO12 Flash Voltage Trap** | Pulling GPIO12 HIGH at boot sets flash to 1.8V, potentially bricking 3.3V modules |
+| **GPIO12 Flash Voltage Trap** | Pulling GPIO12 HIGH at boot sets flash to 1.8V, potentially bricking 3.3V modules (GPIO45 on S2/S3) |
 | **ADC2/WiFi Conflict** | ADC2 pins are unavailable when WiFi is active on ESP32/S2/S3 |
-| **Flash Pin Protection** | Blocks assignment of GPIO6-11 (ESP32), GPIO12-17 (C3), GPIO24-29 (C6), GPIO26-32 (S2/S3) |
+| **Flash Pin Protection** | Blocks assignment of GPIO6-11 (ESP32), GPIO12-17 (C3), GPIO24-26+28-30 (C6), GPIO26-32 (S2/S3) |
+| **Octal PSRAM Protection** | On `N*R8`/`N*R16` ESP32-S3 modules GPIO33-37 are SPIIO4-7 + SPIDQS — blocked, not just warned |
+| **Non-Existent Pins** | GPIO22-25 have no pad on ESP32-S2/S3 (GPIO count ≠ highest GPIO number) |
+| **Native USB Pads** | Warns when GPIO19/20 (USB D-/D+ on S2/S3) are assigned to peripherals |
 | **Input-Only Pins** | Rejects output assignments to GPIO34-39 (ESP32) or GPIO46 (S2/S3) |
 | **PSRAM Conflicts** | Blocks GPIO16-17 on WROVER modules |
 | **Non-Exposed Pins** | Rejects pins not physically bonded on the module (GPIO20, 24, 28-31, 37, 38 on WROOM) |
+| **Addressable LED Timing** | WS2812-family pins go to RMT (`rgbLedWrite` / `rmt_new_tx_channel`), never to LEDC, and the RMT TX channel budget is checked |
+| **LEDC Channel Budget** | 8 channels on S2/S3, 6 on C3/C6, 16 only on the original ESP32 |
 | **Current Budget** | Warns when estimated GPIO current approaches the 200mA limit |
 
 ## Reference Documentation
@@ -166,7 +176,10 @@ ESP32-AI-Agent-Skill/
 │   ├── validate_pinmap.py
 │   ├── generate_config.py
 │   └── platforms/
-└── tests/                    # 50 automated tests
+│       ├── base.py            # Pin / PeripheralGroup / ValidationResult / Platform ABC
+│       ├── esp32.py           # per-variant pin database, validation rules, codegen
+│       └── modules.py         # module ordering codes (N16R8, WROVER, …)
+└── tests/                    # 96 automated tests
 ```
 
 ## Testing
@@ -175,6 +188,10 @@ ESP32-AI-Agent-Skill/
 pip install pytest
 python3 -m pytest tests/ -v
 ```
+
+Every validation run prints the same JSON envelope (`valid`, `errors`, `warnings`, `summary`)
+for any input that reaches validation; exit status 0 = valid, 1 = invalid or unsupported
+variant, 2 = unreadable/malformed input.
 
 ## Contributing
 

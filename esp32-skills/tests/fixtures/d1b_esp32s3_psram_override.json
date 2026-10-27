@@ -1,0 +1,19 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM",
+  "wifi_enabled": false,
+  "psram": {
+    "mode": "octal",
+    "size_mb": 8
+  },
+  "pins": [
+    {
+      "gpio": 33,
+      "function": "LCD_DATA",
+      "protocol_bus": "gpio",
+      "device": "LCD",
+      "direction": "output"
+    }
+  ]
+}
