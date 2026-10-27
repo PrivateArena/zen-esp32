@@ -1,0 +1,54 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM",
+  "wifi_enabled": true,
+  "pins": [
+    {
+      "gpio": 48,
+      "function": "WS2812_BUILTIN",
+      "protocol_bus": "pwm",
+      "device": "NeoPixel",
+      "direction": "output"
+    },
+    {
+      "gpio": 21,
+      "function": "I2C_SDA",
+      "protocol_bus": "i2c",
+      "device": "SSD1306",
+      "direction": "inout",
+      "pull": "external_up",
+      "speed_hz": 400000
+    },
+    {
+      "gpio": 47,
+      "function": "I2C_SCL",
+      "protocol_bus": "i2c",
+      "device": "SSD1306",
+      "direction": "output",
+      "pull": "external_up",
+      "speed_hz": 400000
+    },
+    {
+      "gpio": 9,
+      "function": "ADC1_CH8",
+      "protocol_bus": "adc",
+      "device": "Potentiometer",
+      "direction": "input"
+    },
+    {
+      "gpio": 1,
+      "function": "UART0_TX",
+      "protocol_bus": "uart",
+      "device": "Console",
+      "direction": "output"
+    },
+    {
+      "gpio": 4,
+      "function": "BOOT",
+      "direction": "input",
+      "pull": "up",
+      "device": "Strapping"
+    }
+  ]
+}

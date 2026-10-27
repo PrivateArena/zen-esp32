@@ -1,0 +1,31 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM",
+  "wifi_enabled": true,
+  "pins": [
+    {
+      "gpio": 26,
+      "function": "LED",
+      "protocol_bus": "gpio",
+      "direction": "output"
+    },
+    {
+      "gpio": 18,
+      "function": "ADC2_CH7",
+      "protocol_bus": "adc",
+      "direction": "input"
+    },
+    {
+      "gpio": 45,
+      "function": "SENSOR_IRQ",
+      "direction": "input",
+      "pull": "up"
+    },
+    {
+      "gpio": 46,
+      "function": "BTN",
+      "direction": "input"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM-18N Octal PSRAM",
+  "wifi_enabled": true,
+  "pins": [
+    {
+      "gpio": 26,
+      "function": "LED",
+      "protocol_bus": "gpio",
+      "direction": "output"
+    },
+    {
+      "gpio": 45,
+      "function": "SENSOR_IRQ",
+      "protocol_bus": "gpio",
+      "direction": "input",
+      "pull": "up"
+    },
+    {
+      "gpio": 46,
+      "function": "BTN",
+      "protocol_bus": "gpio",
+      "direction": "input"
+    },
+    {
+      "gpio": 18,
+      "function": "ADC2_CH7",
+      "protocol_bus": "adc",
+      "device": "Battery sense",
+      "direction": "input"
+    },
+    {
+      "gpio": 3,
+      "function": "STRAP_TEST",
+      "direction": "input"
+    },
+    {
+      "gpio": 19,
+      "function": "USB_D-",
+      "direction": "input"
+    },
+    {
+      "gpio": 10,
+      "function": "SPI_MOSI",
+      "protocol_bus": "spi",
+      "speed_hz": 80000000
+    }
+  ]
+}

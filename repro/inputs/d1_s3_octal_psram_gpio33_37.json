@@ -1,0 +1,43 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM",
+  "wifi_enabled": true,
+  "pins": [
+    {
+      "gpio": 33,
+      "function": "RGB_DATA0",
+      "protocol_bus": "gpio",
+      "device": "480x480 RGB LCD",
+      "direction": "output"
+    },
+    {
+      "gpio": 34,
+      "function": "RGB_DATA1",
+      "protocol_bus": "gpio",
+      "device": "480x480 RGB LCD",
+      "direction": "output"
+    },
+    {
+      "gpio": 35,
+      "function": "RGB_DATA2",
+      "protocol_bus": "gpio",
+      "device": "480x480 RGB LCD",
+      "direction": "output"
+    },
+    {
+      "gpio": 36,
+      "function": "RGB_DATA3",
+      "protocol_bus": "gpio",
+      "device": "480x480 RGB LCD",
+      "direction": "output"
+    },
+    {
+      "gpio": 37,
+      "function": "RGB_DATA4",
+      "protocol_bus": "gpio",
+      "device": "480x480 RGB LCD",
+      "direction": "output"
+    }
+  ]
+}

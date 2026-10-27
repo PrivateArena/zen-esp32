@@ -1,0 +1,18 @@
+{
+  "platform": "esp32",
+  "variant": "esp32s3",
+  "module": "WROOM",
+  "wifi_enabled": true,
+  "pins": [
+    {
+      "gpio": 19,
+      "function": "USB_D_MINUS",
+      "direction": "input"
+    },
+    {
+      "gpio": 20,
+      "function": "USB_D_PLUS",
+      "direction": "input"
+    }
+  ]
+}
