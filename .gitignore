@@ -1,3 +1,4 @@
 idf/
 tools/
-repro/
+repro/probe-*.txt
+repro/build/

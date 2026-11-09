@@ -18,7 +18,10 @@ decides the rest).** A board name never tells you the PSRAM bus width — read i
 
 Both are `N16R8`: **16 MB quad flash + 8 MB octal PSRAM**, so on *both* boards GPIO26-32
 are flash and GPIO33-37 are PSRAM. Same reservations, completely different boards — which
-is the reason the two files exist separately.
+is the reason the two files exist separately. And the reservation is *not* a guarantee of
+empty header pins: the `yuanxinwei` board breaks out **GPIO35/36/37 = SPIIO5-7** on its header
+and silkscreens them `✱ PSRAM`, so on that board a reserved pad is a connector pin you can
+short out — see its profile §3.
 
 ## 2. Telling them apart without a datasheet
 

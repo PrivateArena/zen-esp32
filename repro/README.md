@@ -72,3 +72,13 @@ md5 `32faac5e14b1037b7385903742da2b35`). Restore with
 `firmware/psram_smoke/` (heap + OPI PSRAM read/write report) and
 `firmware/rgb_blink/` (WS2812 colour cycle on GPIO48 = `PIN_RGB_LED`). Both build
 with the FQBN recorded in `../ENV-REVIEW2.md` §10.1.
+
+`firmware/led_find/` — tells a serial LED from an addressable one on an unnamed board: drives
+the pads the silkscreen names, then sends real WS2812 data, printing a phase per line so the
+person watching can report "phase 3 lit the one marked `48`".
+
+`firmware/sd_net_find/` — targeted microSD net discovery when the *silk already names some of
+the pads*. Push-pull CMD0 over every role permutation of the marked pads + one unknown; it
+exists because `board_sonde` S4 drives **open-drain**, and an open-drain "0" against a ~10 kΩ
+board pull-up sits at ~2.7 V — a sweep built that way is blind on exactly the pads that carry
+pull-ups. Needs `PSRAM=disabled` if the unknown pad may be GPIO33-37.
