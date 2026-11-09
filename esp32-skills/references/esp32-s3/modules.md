@@ -47,7 +47,10 @@ Two board-design consequences that people hit repeatedly:
 ## 3. Identify the module from software (no datasheet, no photo)
 
 ```bash
-PORT=/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_68:EE:8F:5A:C4:44-if00
+# Never hardcode a node: on the native-USB socket the by-id name carries the MAC, and that
+# name only exists while USB-Serial-JTAG firmware is running (an app-owned CDC stack replaces
+# it). Resolve it every session:
+PORT=$(ls -1 /dev/serial/by-id/* | head -1)       # or the CH9102 node, see the board profile
 esptool --chip esp32s3 --port $PORT chip-id      # chip, revision, PSRAM class, crystal, MAC
 esptool --chip esp32s3 --port $PORT flash-id    # flash size + vendor id
 espefuse --chip esp32s3 --port $PORT summary    # PSRAM_CAP / PSRAM_VENDOR / FLASH_TYPE / VDD_SPI
@@ -60,7 +63,7 @@ Chip type:          ESP32-S3 (QFN56) (revision v0.2)
 Features:           Wi-Fi, BT 5 (LE), Dual Core + LP Core, 240MHz, Embedded PSRAM 8MB (AP_3v3)
 Crystal frequency:  40MHz
 USB mode:           USB-Serial/JTAG
-MAC:                68:ee:8f:5a:c4:44
+MAC:                <base MAC>   # one module's identity, not a handle for the port
 
 Manufacturer: 1c     Device: 7018     Detected flash size: 16MB
 Flash type set in eFuse: quad (4 data lines)

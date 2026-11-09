@@ -21,8 +21,9 @@ find for a "similar" board.
 | PSRAM | **8 MB octal (OPI)**, `PSRAM_VENDOR=AP_3v3`, `PSRAM_TEMP=85C` | `espefuse summary` |
 | Flash voltage | 3.3 V forced by eFuse (`VDD_SPI_FORCE=1`, `VDD_SPI_TIEH=VDD3P3_RTC_IO`) | `espefuse summary` |
 | Module class | ⇒ **`N16R8`**: GPIO26-32 flash, **GPIO33-37 = PSRAM, not user pins** | derived from the two rows above |
-| MAC | `e0:72:a1:d4:e4:80` | `chip-id` |
-| Console | **CH9102** (`1a86:55d3`, "USB Single Serial", SN `5C82085540`) on **UART0, GPIO43/44** | hotplug log, ROM banner seen on that node |
+| Base MAC | `e0:72:a1:d4:e4:80` — identity of *this module*, read once to cross-check the CH9102 SN above; **not** a port handle and not a lookup key | `chip-id`, 2026-11-09 |
+| Console | **CH9102** (`1a86:55d3`, "USB Single Serial", SN `5C82085540`) on **UART0, GPIO43/44** → node `/dev/serial/by-id/usb-1a86_USB_Single_Serial_5C82085540-if00` | hotplug log, ROM banner seen on that node |
+| Flashed state | **`repro/firmware/board_sonde`** at `0x10000` since 2026-11-09 (`PSRAM=opi`, `PROBE_I2C=0`, `PROBE_SD=0`) — the factory app is **gone from flash**, restore it from `repro/backup-new-s3-app.bin` | `esptool chip-id` + `read-flash` strings |
 | Auto-reset | **works** — `esptool --before default-reset` enters the bootloader with no button press | observed |
 | Buttons | `EN/RST` and `BOOT`/`IO0` present, but not needed for normal flashing | visual + auto-reset above |
 | Buttons' LEDs | silkscreen `ON`, `TX`, `RX`, `IO2`, `48` beside the USB sockets | photo |
@@ -101,6 +102,26 @@ the same PCB.
 
 Once the slot answers, stage S4 of the sonde proves the net map by reading block 0 and the
 partition table, not by a single ACK.
+
+### 4.1 Re-test 2026-11-09 — same result, and why the sweep cannot be the culprit
+
+Card verified good on a PC reader, then re-measured: stage S1 with the card in still shows
+**no** external pull-up anywhere except `0 4 5 20 38 39 40` (straps/JTAG/USB D+), i.e. none
+of the card's five 50 kΩ pull-ups (CS, CMD, DAT1-3) are present.
+
+**Gate rule: a slot that shows no card pull-ups is an unpowered or uncontacted slot, and any
+sweep run against it returns a guaranteed 0 replies.** Do not re-run the 39,270-tuple sweep
+to "be sure" — re-run S1 instead, and only after something physical changed. What software
+cannot distinguish here: no power · no contact · not wired to this SoC.
+
+Physical checks that do settle it, in order (µSD pinout, contacts facing you: 1 DAT2 ·
+2 DAT3/CS · 3 CMD · **4 VDD** · 5 CLK · 6 VSS · 7 DAT0 · 8 DAT1):
+
+1. Meter VDD(4) → VSS(6) with the board powered: 3.3 V or the slot is dead — stop, no
+   software step can help.
+2. Look for unpopulated series resistor / 0 Ω pads between the slot and the SoC side.
+3. Re-seat against the silkscreen, then a second card, then the other USB-C socket / cable
+   (a current-limited hub port can drop a marginal slot supply).
 
 ## 5. Build / flash recipes that work on this board
 

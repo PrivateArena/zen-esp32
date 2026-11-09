@@ -29,6 +29,8 @@ repro/board_probe.sh                 # or: repro/board_probe.sh /dev/ttyUSB0
 
 | Observable | Command | Reads as |
 |---|---|---|
+| **Which port is which board** | `ls -l /dev/serial/by-id/` | the **CH9102 bridge serial**: `5C82085540` → this folder's `yuanxinwei-esp32s3-cam-sd.md`, `5D01162178` → `zen-esp32-rig.md`. Burned in the bridge, so it survives any reflash and costs no board reset to read — the only handle that is safe to script. Never `ttyACMx` (letters move), never the MAC (module identity, needs a bootloader reset to read, and app-owned CDC replaces the MAC-derived USB iSerial) |
+|---|---|---|
 | USB identity, app running | `lsusb` | `303a:1001` = USB-Serial-JTAG (nothing is claiming USB). `303a:4001` + `iSerial 123456` = an app-owned TinyUSB CDC stack — the ROM is then **not** reachable over that port |
 | USB identity, bridge side | `lsusb` | `1a86:55d3` = CH9102 on UART0 (GPIO43/44). Flashing works through it with `--before default-reset` |
 | Memory class | `esptool chip-id`, `espefuse summary` | `Embedded PSRAM 8MB (AP_3v3)` + `FLASH_TYPE = 4 data lines` ⇒ `N*R8` ⇒ GPIO33-37 reserved |

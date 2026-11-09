@@ -4,6 +4,7 @@
 #
 # Usage: ./run.sh [path-to-esp32-skills]      # exit 0 only if every case passes
 set -u
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 2   # paths below (./check.py, inputs/, ../esp32-skills) are kit-relative
 SKILL="${1:-../esp32-skills}"
 C="./check.py"
 FAIL=0
