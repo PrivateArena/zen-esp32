@@ -37,6 +37,25 @@ grep -q "GPIO33-37" "$SKILL/references/esp32-s3/specs.md" \
 grep -q "N16R8" "$SKILL/references/esp32-s3/modules.md" \
   && echo "PASS  modules.md carries the real ordering codes" \
   || { echo "FAIL  modules.md missing"; FAIL=1; }
+grep -q "Never re-parent an MSPI pad" "$SKILL/references/esp32-s3/specs.md" \
+  && echo "PASS  specs.md documents the MSPI re-parent hazard" \
+  || { echo "FAIL  specs.md missing the re-parent hazard"; FAIL=1; }
+
+echo
+echo "=========== D9 board profiles (one per physical board) ==========="
+BD="$SKILL/references/esp32-s3/boards"
+for f in README.md zen-esp32-rig.md yuanxinwei-esp32s3-cam-sd.md; do
+  [ -s "$BD/$f" ] && echo "PASS  boards/$f present" || { echo "FAIL  boards/$f missing"; FAIL=1; }
+done
+# every profile the index links to must exist, and every profile must name its module class
+for f in $(grep -oE '\]\([a-z0-9._-]+[.]md\)' "$BD/README.md" | sed 's/^](//; s/)$//'); do
+  [ -f "$BD/$f" ] && echo "PASS  index link resolves: $f" || { echo "FAIL  boards/README.md links a missing $f"; FAIL=1; }
+done
+for f in "$BD"/*-*.md; do
+  grep -qE "N[0-9]+R[0-9]+|no PSRAM|module class" "$f" \
+    && echo "PASS  $(basename "$f") states its module class" \
+    || { echo "FAIL  $(basename "$f") has no module class (reserved pins depend on it)"; FAIL=1; }
+done
 
 echo
 if [ "$FAIL" -eq 0 ]; then echo "ALL CASES PASS"; else echo "SOME CASES FAILED"; fi

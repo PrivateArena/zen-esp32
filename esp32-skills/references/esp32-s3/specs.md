@@ -67,6 +67,26 @@ Technical Reference Manual.
 - **LCD/Camera:** supports RGB, 8080, and I80 interfaces. Note that a 16-bit RGB
   panel needs ~10 data lines; on an octal-PSRAM module GPIO33-37 are unavailable,
   so RGB panels on N*R8 modules use GPIO38-48 + the low group.
+- **One camera, one set of pads:** `IDF: SOC_LCDCAM_CAM_PERIPH_NUM = 1`,
+  `SOC_LCDCAM_CAM_DATA_WIDTH_MAX = 16`, `SOC_LCDCAM_CAM_SUPPORT_RGB_YUV_CONV = 1`
+  (`soc_caps.h`). A DVP bus is 8-10 data + PCLK + VSYNC + HREF + XCLK (+ PWDN/RESET) =
+  **14-16 pads**, which on an `N*R8` module has to come out of the ~33 pads that survive
+  flash + octal PSRAM. Camera + 4-bit SD + an RGB panel does not fit; check the budget
+  before promising all three.
+- **XCLK is not an LEDC job.** The camera clock belongs to `LCD_CAM`. From the 80 MHz APB
+  the LEDC divider cannot even be *programmed* for 20 MHz — measured at runtime:
+  `E ledc: requested frequency 20000000 and duty resolution 8 can not be achieved` — and a
+  failed `ledcAttach()` keeps the channel, so a probe that "tries 20 MHz then 8 MHz then
+  5 MHz" silently ends up with **no clock on any pin**. For SCCB probing a register-toggle
+  clock on the other core reaches ~15 MHz, which is enough to make a sensor answer.
+- **SDMMC has no fixed pads on ESP32-S3.** `IDF: SOC_SDMMC_HOST_SUPPORTED = 1`,
+  `SOC_SDMMC_NUM_SLOTS = 2`, `SOC_SDMMC_USE_GPIO_MATRIX = 1`, and
+  `IDF: components/soc/esp32s3/sdmmc_periph.c` leaves **every** default slot pin at `-1`
+  (contrast the original ESP32, whose SDIO pads are fixed at 2/4/12-15). `sdmmc_slot_info`
+  advertises `width = 8`. The pad numbers IDF defines for the SDHOST signals are
+  `IDF: io_mux_reg.h` → `SD_CMD=11, SD_CLK=12, SD_DATA0=13, SD_DATA1=14, SD_DATA2=9,
+  SD_DATA3=10`. Consequence: "which pins does the SD card use" is a **board** question —
+  see `boards/`, and never answer it from the chip datasheet.
 - **UARTs:** 3. UART0 default pads TX=GPIO43, RX=GPIO44. UART1 defaults
   TX=17, RX=18, RTS=19, CTS=20. **UART2 has no default pads** — both pins must be
   assigned (`IDF: uart_pins.h`).
@@ -79,6 +99,13 @@ Technical Reference Manual.
 - **Non-existent pins:** GPIO22-25 (error, not warning — there is nothing to
   configure).
 - **Flash pins:** GPIO26-32 (`IDF: MSPI_*`), never usable as GPIO.
+- **Never re-parent an MSPI pad — not even to read it.** `pinMode()` (or any GPIO-matrix
+  remap) on GPIO26-32, or on GPIO33-37 while octal PSRAM is live, detaches the MSPI
+  function from that pad. The next cache miss then cannot reach flash and the CPU hangs:
+  `rst:0x8 (TG1WDT_SYS_RST)`. Measured on two boards: a probe that passively "read" every
+  pad including GPIO26-32 crashed at GPIO30, mid-survey. A `PSRAM=disabled` build is the
+  only way to legitimately look at GPIO33-37, and `psramFound()` is how you prove which
+  build is running.
 - **Octal PSRAM:** GPIO33-37 on `N*R8`/`N*R16` modules — see §2.
 - **ADC2/WiFi conflict:** ADC2 readings are invalid when Wi-Fi is active
   (GPIO11-20). GPIO19/20 are additionally the USB pads.
@@ -108,5 +135,8 @@ Technical Reference Manual.
   GPIO16 (XTAL_32K_N) — using either as a normal GPIO forbids `RTC_CLK_SRC_EXT_XTAL`.
 
 ## 6. See also
-- `modules.md` (next to this file) — how to decode `N16R8`-style module codes and
-  a worked identification of a real board.
+- `modules.md` (next to this file) — how to decode `N16R8`-style module codes and why the
+  ordering number, not the board name, decides the reserved pins.
+- `boards/` — per-board profiles: connectors, sockets, LEDs, card slots, and the measured
+  pad behaviour of each board this reference has physically probed. Two `N16R8` boards with
+  nothing else in common live there side by side.

@@ -91,24 +91,28 @@ not abort validation any more: it produces a `MODULE_UNKNOWN` warning, the JSON
 result is still emitted, and the reserved-pin decision is reported so a human can
 confirm it against `espefuse`.
 
-## 5. Board profile: `zen-esp32` bring-up rig (verified end-to-end)
+## 5. Board profiles
 
-| Property | Value | Evidence |
-|---|---|---|
-| Chip | ESP32-S3 QFN56 v0.2, LP core, 40 MHz crystal | `esptool chip-id` |
-| Memory | 16 MB flash (XMC 0x1c/0x7018) + 8 MB OPI PSRAM, 3.3 V | `flash-id`, `espefuse summary` |
-| Console | single USB-C carrying **either** CH9102 (GPIO43/44) **or** native USB, alternating | hotplug log |
-| USB identity while running | `303a:1001` USB-Serial-JTAG (stable across reflashing) | `lsusb` |
-| On-board LED | WS2812 on **GPIO48** = `PIN_RGB_LED`; cycle RED→GREEN→BLUE→WHITE→OFF at 150 ms confirmed | `rgb_blink` + user |
-| Working FQBN | `esp32:esp32:esp32s3:FlashMode=dio,FlashSize=16M,PSRAM=opi,CDCOnBoot=cdc,USBMode=hwcdc,UploadMode=default,PartitionScheme=app3M_fat9M_16MB,UploadSpeed=921600` | build+flash+monitor in one session |
-| Working IDF config | `CONFIG_ESPTOOLPY_FLASHMODE_DIO`, `FLASHSIZE_16MB`, `SPIRAM=y`, `SPIRAM_MODE_OCT`, `SPIRAM_SPEED_80M` | `idf.py build` clean |
+Which pad a connector uses, which socket carries the console, where the LED sits — those
+are board facts, not module facts, and two boards on the same `N16R8` can disagree about
+every one of them. They live in [`boards/`](boards/README.md):
 
-Two S3-specific traps that cost a whole debugging session:
+* [`boards/zen-esp32-rig.md`](boards/zen-esp32-rig.md) — the bring-up rig this reference
+  was written for, with its working FQBN and IDF config.
+* [`boards/yuanxinwei-esp32s3-cam-sd.md`](boards/yuanxinwei-esp32s3-cam-sd.md) — a camera
+  FPC + microSD board on the **same** `N16R8` module, with two USB-C sockets of different
+  character and a card slot that answers to nothing.
 
-1. **`CDCOnBoot=cdc` keeps the port identity stable.** With `CDCOnBoot=default`
-   the connector switches between the CH9102 (`1a86:55d3`) and the ESP32-S3
-   (`303a:1001`) as the app state changes, so `/dev/tty*` appears to change role
-   under the user. With `cdc` it is the same device across flashing and running.
-2. **Pin the port by path, not by letter.** `/dev/serial/by-path/…` (or by-id) —
-   the USB-Serial-JTAG node disappears for a moment at every mode flip, and
-   `/dev/ttyACM0` is re-used by the other bridge.
+Same module class, two unrelated boards: identical reserved-pin sets, different connectors,
+different USB story. That is why a profile is its own file and not a row in the table
+above.
+
+Two traps that apply to any S3 board and that cost a whole debugging session here:
+
+1. **`CDCOnBoot=cdc` keeps the port identity stable.** With `CDCOnBoot=default` the
+   connector switches between the CH9102 (`1a86:55d3`) and the ESP32-S3 (`303a:1001`) as the
+   app state changes, so `/dev/tty*` appears to change role under the user. With `cdc` it is
+   the same device across flashing and running.
+2. **Pin the port by path, not by letter.** `/dev/serial/by-path/…` or by-id — the node
+   index is not stable. On the second board a USB link drop brought the *same* bridge back
+   as `/dev/ttyACM1`, so anything holding the old letter talked to nothing, silently.

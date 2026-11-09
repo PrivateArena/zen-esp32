@@ -23,6 +23,7 @@ ALWAYS load the platform pin database. Load other files only when their trigger 
 | `references/esp32-s2/specs.md` | ESP32-S2 variant specifics |
 | `references/esp32-s3/specs.md` | ESP32-S3 variant specifics |
 | `references/esp32-s3/modules.md` | Any ESP32-S3 board with PSRAM, any module/part number to decode (N8R8, N16R8, WROOM-1/2, MINI-1), or "which pins does octal PSRAM eat" |
+| `references/esp32-s3/boards/README.md` | A specific ESP32-S3 **board** is named, or the question is about a connector, card slot, camera socket, on-board LED or which USB socket is the console — then load the matching profile in that folder |
 | `references/esp32-c3/specs.md` | ESP32-C3 variant specifics |
 | `references/esp32-c6/specs.md` | ESP32-C6 variant specifics |
 | `references/esp32-h2/specs.md` | ESP32-H2 variant specifics |
@@ -50,6 +51,8 @@ Actively protect hardware from destructive configurations:
 * **Octal PSRAM steals five GPIOs (ESP32-S3):** on `N*R8` / `N*R16` modules GPIO33-37 are SPIIO4-7 + SPIDQS. Treat them as absent. Decode the module ordering code before placing any pin (`references/esp32-s3/modules.md`).
 * **Pins that do not exist:** GPIO22-25 are not pins on ESP32-S2/S3 (`SOC_GPIO_PIN_COUNT` is a max number, not a count). Refuse any design that uses them.
 * **Flash/PSRAM bus pins:** GPIO6-11 (ESP32), GPIO26-32 (S2/S3), GPIO12-17 (C3), GPIO24-26+28-30 (C6) — never assignable.
+* **Never re-parent an MSPI pad, not even to read it:** `pinMode()` on GPIO26-32 (or GPIO33-37 while octal PSRAM is live) detaches the flash/PSRAM function from the pad; the next cache miss cannot reach flash and the CPU hangs with `TG1WDT_SYS_RST`. Confirmed by crashing a probe that only *read* those pads (`references/esp32-s3/specs.md` §4).
+* **A board is not a module:** the module ordering code decides the reserved pins, but connectors, console socket, on-board LED and card-slot pads are board facts. Load `references/esp32-s3/boards/README.md` and the matching profile. If the board is not in there, say so and measure it (`repro/firmware/board_sonde/`) — do not copy a "similar" board's pin map.
 * **Native USB pads:** GPIO19 (D-) / GPIO20 (D+) on S2/S3. Using them breaks flashing-over-USB, the CDC console and USB-Serial-JTAG once the app runs — the failure looks unrelated to the pin choice.
 * **ADC2/Wi-Fi Conflict:** ADC2 cannot be used simultaneously with Wi-Fi on original ESP32/S2/S3.
 * **Input-Only Pins:** GPIOs 34-39 on the original ESP32 (GPIO46 on S2/S3) are strictly inputs and lack internal pull resistors.
@@ -91,7 +94,7 @@ Actively protect hardware from destructive configurations:
 
 ## 6. Core Workflow
 
-1. **Parse:** Extract MCU variant, module (real ordering code if available), memory (flash/PSRAM size and PSRAM bus width), protocols, and framework. If the module is unknown and the board has PSRAM, say so and ask — the reserved-pin set depends on it.
+1. **Parse:** Extract MCU variant, module (real ordering code if available), memory (flash/PSRAM size and PSRAM bus width), board profile (if the board is named), protocols, and framework. If the module is unknown and the board has PSRAM, say so and ask — the reserved-pin set depends on it. If the *board* is unknown, that limits connector-level advice only, not validation: state which is which.
 2. **Detect:** Identify potential conflicts (ADC2, Strapping pins, Flash pins).
 3. **Load:** Read triggered references from `references/`.
 4. **Generate:** Assign pins using GPIO Matrix flexibility. Prefer conventional defaults unless conflicts exist.

@@ -32,6 +32,15 @@ D7 (documentation) is checked by grepping `references/esp32-s3/specs.md` and
 
 ## Board-touching helpers (only these need the ESP32-S3 connected)
 
+`board_probe.sh` — one-shot identification of an unknown board: hotplug log, USB
+ descriptors, `chip-id` / `flash-id` / `espefuse summary`, and 4 s of the running app's
+ console, all tee'd to `probe-<timestamp>.txt`. Those logs are generated evidence, not
+ sources; keep the one that backs a profile and delete the rest.
+
+`hardreset.py` — pulses **EN only** (RTS with DTR released). Both asserted means "hold in
+reset with the boot strap low" = download mode, which is why the other helpers cannot be
+used to restart an app.
+
 `uart_tail.py` — pure-`termios` capture, **no DTR/RTS pulse**, so it never resets
 the board. `uart_probe.py` — same but pulses DTR/RTS (it *does* reboot the target);
 positional arguments, not flags.
@@ -47,6 +56,19 @@ USB-Serial/JTAG (`303a:1001`) ignores the baud rate entirely; the CH9102 needs
 
 ## Firmware kept as evidence
 
+`firmware/board_sonde/` — identifies a board from the chip side when there is no
+schematic: identity, per-pad DC survey, SCCB sweep over every pad pair (with and without a
+measured pixel clock), sensor ID, and a microSD slot search that enumerates `(CLK,CS,DI)`
+while reading the CMD0 reply on every other pad at once, then proves the map by reading
+block 0. See `../esp32-skills/references/esp32-s3/boards/README.md` §3 for the four rules
+it exists to respect and the two build knobs (`PROBE_I2C`, `PROBE_OPI_PADS`, and the
+`PSRAM=disabled` FQBN they require).
+
+`backup-new-s3-app.bin` — the factory image of the second board (0x000000-0x110000,
+md5 `32faac5e14b1037b7385903742da2b35`). Restore with
+`esptool --port $PORT write-flash 0x0 backup-new-s3-app.bin`.
+
+`firmware/psram_smoke/`
 `firmware/psram_smoke/` (heap + OPI PSRAM read/write report) and
 `firmware/rgb_blink/` (WS2812 colour cycle on GPIO48 = `PIN_RGB_LED`). Both build
 with the FQBN recorded in `../ENV-REVIEW2.md` §10.1.
