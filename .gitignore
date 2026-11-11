@@ -2,3 +2,4 @@ idf/
 tools/
 repro/probe-*.txt
 repro/build/
+.scratch/
